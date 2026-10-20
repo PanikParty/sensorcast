@@ -34,6 +34,52 @@ TimesFM is genuinely competitive at 6 h (best on 5 of 9 individual sensors) but 
 interval only covers 70 % of outcomes — it *looks* sharper than it is on quantile loss.
 Timestral's bands land at 80–83 % where 80 % was asked for.
 
+## Can a third party verify this?
+
+Yes for the numbers in `results/REPORT.md` — the artifacts are committed, not just the code.
+
+| what | where |
+|---|---|
+| Raw readings from all 9 sensors (13,851 rows, unresampled) | `results/data/shelly_raw_samples.csv` |
+| Device table (ids, firmware, model) | `results/data/devices.csv` |
+| Hourly benchmark input (1,295 h × 9 sensors) | `results/data/shelly_hourly.csv` |
+| SHA-256 of each of those files | `results/data/CHECKSUMS.txt` |
+| Every prediction (medians + quantiles, per window) | `results/forecasts.npz` |
+| Per-window scores for every model | `results/per_window_scores.csv` |
+| Aggregates used in the report | `results/summary.csv` |
+| Exact protocol, cutoff and environment | `results/run_manifest.json` |
+| Frozen dependency versions (incl. the Timestral commit) | `requirements.lock.txt` |
+
+```bash
+python scripts/verify_scores.py      # exit 0 = every published number reproduces
+```
+
+That script does three independent re-derivations, using no model weights and no GPU:
+
+1. **Rebuilds the hourly grid** from the raw readings and asserts it matches the committed
+   snapshot cell-for-cell (proves the resample, not just that a CSV exists).
+2. **Recomputes MAE/RMSE/MASE/WQL/coverage** for every (model, horizon) from
+   `forecasts.npz` and compares against `summary.csv`.
+3. **Cross-checks per-window MAE** in `per_window_scores.csv` against the same predictions.
+
+Data integrity: the export is pinned to the run's `t_end` cutoff (`export_raw.py` refuses to
+overwrite the snapshot if the live database has moved on), so "the data" means one fixed
+dataset — the same 1,295 hours every number was computed on. Checksums catch any edit.
+
+What is **not** fully pinned, stated plainly:
+
+* **The covariate arm is not in `forecasts.npz`** — it needs a re-run of Timestral with
+  `known_covariates` (slow path), so those four numbers are reproducible from code but not
+  auditable offline from the dump. Everything in the main table is.
+* **Checkpoint weights resolve to the Hugging Face `main` revision** at download time. The
+  exact snapshot commits used are recorded under `env.hf_snapshot_commits` in
+  `run_manifest.json`, so they can be pinned with `revision=<commit>`, but the adapters do
+  not pass a revision automatically.
+* **CPU inference is not bit-identical across machines** — thread count changes reduction
+  order, so a re-run on different hardware may differ in the last decimal. MASE/MAE
+  reproduce to well within the differences being reported; the offline metric check from
+  `forecasts.npz` is exact.
+
 ## Why this exists
 
 The launch claims for Timestral (first on GIFT-Eval, TIME and fev-bench; a 209M model

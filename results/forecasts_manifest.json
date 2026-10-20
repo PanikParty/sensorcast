@@ -1,0 +1,28 @@
+{
+  "horizons": [
+    24,
+    6
+  ],
+  "models": [
+    "timestral-5M",
+    "timestral-28M",
+    "timestral-123M",
+    "timestral-209M",
+    "timesfm-3.0",
+    "chronos-bolt-small",
+    "persistence",
+    "seasonal_naive",
+    "climatology_hod",
+    "drift"
+  ],
+  "window_meta": {
+    "24": {
+      "n": 230,
+      "context_len": 504
+    },
+    "6": {
+      "n": 236,
+      "context_len": 504
+    }
+  }
+}

@@ -1,0 +1,35 @@
+h=24: 230 windows
+Fetching 2 files:   0%|          | 0/2 [00:00<?, ?it/s]Fetching 2 files: 100%|██████████| 2/2 [00:00<00:00, 1414.37it/s]
+  timestral-5M           median (230, 24) quantiles yes
+Fetching 2 files:   0%|          | 0/2 [00:00<?, ?it/s]Fetching 2 files: 100%|██████████| 2/2 [00:00<00:00, 1806.72it/s]
+  timestral-28M          median (230, 24) quantiles yes
+Fetching 2 files:   0%|          | 0/2 [00:00<?, ?it/s]Fetching 2 files: 100%|██████████| 2/2 [00:00<00:00, 1665.07it/s]
+  timestral-123M         median (230, 24) quantiles yes
+Fetching 2 files:   0%|          | 0/2 [00:00<?, ?it/s]Fetching 2 files: 100%|██████████| 2/2 [00:00<00:00, 1571.19it/s]
+  timestral-209M         median (230, 24) quantiles yes
+  timesfm-3.0            median (230, 24) quantiles yes
+Loading weights:   0%|          | 0/143 [00:00<?, ?it/s]Loading weights: 100%|██████████| 143/143 [00:00<00:00, 7953.55it/s]
+  chronos-bolt-small     median (230, 24) quantiles yes
+  persistence            median (230, 24) quantiles no
+  seasonal_naive         median (230, 24) quantiles no
+  climatology_hod        median (230, 24) quantiles no
+  drift                  median (230, 24) quantiles no
+h=6: 236 windows
+Fetching 2 files:   0%|          | 0/2 [00:00<?, ?it/s]Fetching 2 files: 100%|██████████| 2/2 [00:00<00:00, 1903.04it/s]
+  timestral-5M           median (236, 6) quantiles yes
+Fetching 2 files:   0%|          | 0/2 [00:00<?, ?it/s]Fetching 2 files: 100%|██████████| 2/2 [00:00<00:00, 1460.41it/s]
+  timestral-28M          median (236, 6) quantiles yes
+Fetching 2 files:   0%|          | 0/2 [00:00<?, ?it/s]Fetching 2 files: 100%|██████████| 2/2 [00:00<00:00, 1569.72it/s]
+  timestral-123M         median (236, 6) quantiles yes
+Fetching 2 files:   0%|          | 0/2 [00:00<?, ?it/s]Fetching 2 files: 100%|██████████| 2/2 [00:00<00:00, 1452.82it/s]
+  timestral-209M         median (236, 6) quantiles yes
+  timesfm-3.0            median (236, 6) quantiles yes
+Loading weights:   0%|          | 0/143 [00:00<?, ?it/s]Loading weights: 100%|██████████| 143/143 [00:00<00:00, 7568.65it/s]
+  chronos-bolt-small     median (236, 6) quantiles yes
+  persistence            median (236, 6) quantiles no
+  seasonal_naive         median (236, 6) quantiles no
+  climatology_hod        median (236, 6) quantiles no
+  drift                  median (236, 6) quantiles no
+
+-> results/forecasts.npz  (1.7 MB)
+exit=0

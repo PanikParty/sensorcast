@@ -37,5 +37,27 @@
     "shed",
     "shed_north"
   ],
-  "torch_threads": 4
+  "torch_threads": 4,
+  "env": {
+    "python": "3.12.13",
+    "platform": "Linux-6.19.10-300.fc44.x86_64-x86_64-with-glibc2.43",
+    "numpy": "2.5.4",
+    "pandas": "3.0.6",
+    "matplotlib": "3.11.2",
+    "torch": "2.14.1",
+    "timestral": "1.0.0",
+    "chronos": "2.3.2",
+    "timesfm": "3.0.2",
+    "huggingface_hub": "2.2.0",
+    "timestral_git_rev": "a534bdbd244d (https://github.com/mistralai/timestral.git)",
+    "torch_threads": 4,
+    "hf_snapshot_commits": {
+      "mistralai/Timestral-123M": "5a147287addda85f6acd8da3fb8858fe9af7e8f7",
+      "mistralai/Timestral-209M": "9874d252ab0aae16f7f7c999f98f98d6ad7d8365",
+      "mistralai/Timestral-28M": "49b26409ac87b5935539a5d8ffe7f397b720db47",
+      "mistralai/Timestral-5M": "bdd20cfc15a3fea0e4cb5ccef37f8d3ca7aa335f",
+      "google/timesfm-3.0-pytorch": "43046b85ec22d584a13f8098c2ed39c889e129c2",
+      "amazon/chronos-bolt-small": "772f3d25d38aec6d914c8949dab4462e2d46f5d8"
+    }
+  }
 }

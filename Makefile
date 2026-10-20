@@ -2,7 +2,7 @@ VENV := .venv
 PY := $(VENV)/bin/python
 PIP := $(VENV)/bin/pip
 
-.PHONY: help setup bench quick test smoke report clean
+.PHONY: help setup bench quick test smoke report verify data pin clean
 
 help:
 	@grep -E '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | sed 's/:.*## /\t/'
@@ -20,6 +20,15 @@ quick: ## fast slice: 24h horizon, two models
 
 smoke: ## verify every model loads and predicts (no scoring)
 	$(PY) scripts/smoke_models.py
+
+verify: ## recompute every published score from the committed artifacts (exit 0 = reproduces)
+	$(PY) scripts/verify_scores.py
+
+data: ## re-export raw samples + checksums, pinned to the benchmark cutoff
+	$(PY) scripts/export_raw.py
+
+pin: ## freeze dependency versions + HF snapshot commits into the manifest
+	$(PY) scripts/pin_env.py
 
 test: ## unit tests
 	$(PY) -m pytest -q

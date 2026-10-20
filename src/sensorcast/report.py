@@ -220,7 +220,9 @@ def build(
         L.append("")
 
     L.append("## Latency (this box: Intel N150, 4 cores, CPU-only)\n")
-    lat = agg[agg["model"].str.startswith(FOUNDATION)][["horizon", "model", "ms_per_series"]].copy()
+    lat = pd.DataFrame()
+    if "ms_per_series" in agg.columns:
+        lat = agg[agg["model"].str.startswith(FOUNDATION)][["horizon", "model", "ms_per_series"]].copy()
     if len(lat):
         piv = lat.pivot_table(index="model", columns="horizon", values="ms_per_series")
         piv = piv.reset_index()
