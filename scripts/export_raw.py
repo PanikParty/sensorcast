@@ -42,7 +42,7 @@ def rebuild_hourly(raw: pd.DataFrame, index: pd.DatetimeIndex, columns) -> pd.Da
     raw["time"] = (
         pd.to_datetime(raw["ts"], unit="s", utc=True).dt.tz_convert(data.LOCAL_TZ).dt.floor("h")
     )
-    wide = raw.groupby(["col", "time"])["t_c"].mean().unstack()
+    wide = raw.groupby(["col", "time"])["t_c"].mean().unstack("col")
     return wide.reindex(index=index, columns=columns)
 
 
@@ -51,16 +51,21 @@ def main() -> None:
     ap.add_argument("--db", default=str(data.DEFAULT_DB))
     ap.add_argument("--out", default="results/data")
     ap.add_argument("--cutoff", default=None,
-                    help="ISO local timestamp; defaults to t_end in results/run_manifest.json")
+                    help="ISO local time the benchmark read the DB (see results/run.log); "
+                         "defaults to t_end in results/run_manifest.json")
     args = ap.parse_args()
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
 
     cutoff = pd.Timestamp(args.cutoff) if args.cutoff else None
-    if cutoff is None:
-        man = Path("results/run_manifest.json")
-        if man.exists():
-            cutoff = pd.Timestamp(json.loads(man.read_text())["t_end"])
+    expected_rows = None
+    man = Path("results/run_manifest.json")
+    if man.exists():
+        manifest = json.loads(man.read_text())
+        expected_rows = manifest.get("raw_samples")
+        if cutoff is None:
+            # t_end is the start of the last (possibly partial) hour; samples inside it count
+            cutoff = pd.Timestamp(manifest["t_end"])
     cutoff_epoch = int(cutoff.timestamp()) if cutoff is not None else None
     if cutoff is not None:
         print(f"cutoff: {cutoff}  (samples after this are excluded)")
@@ -99,15 +104,23 @@ def main() -> None:
     frozen = data.load_snapshot(p_hourly)
     rebuilt = rebuild_hourly(raw, frozen.index, frozen.columns)
     a, b = rebuilt.to_numpy(dtype=float), frozen.to_numpy(dtype=float)
-    both_nan = np.isnan(a) & np.isnan(b)
-    worst = float(np.nanmax(np.where(both_nan, 0.0, np.abs(a - b))))
-    if worst > 1e-6:
+    # a cell present on one side and missing on the other is a mismatch, not a skip
+    nan_mismatch = int((np.isnan(a) != np.isnan(b)).sum())
+    both = ~np.isnan(a) & ~np.isnan(b)
+    # the snapshot is written at 3 dp, so allow half a unit in the last place
+    worst = float(np.abs(a - b)[both].max()) if both.any() else float("inf")
+    if nan_mismatch or worst > 5e-4 + 1e-9:
         raise SystemExit(
             f"REFUSING TO OVERWRITE: the raw export rebuilds a different hourly grid "
-            f"(max |diff| = {worst:.3e} deg C). The live DB has likely moved past the "
-            f"benchmark cutoff -- pass --cutoff explicitly or re-run the benchmark."
+            f"(max |diff| = {worst:.3e} deg C, {nan_mismatch} missing/present mismatches). The "
+            f"cutoff must be the moment the benchmark read the DB (see results/run.log), not the "
+            f"start of the last hour -- pass --cutoff explicitly or re-run the benchmark."
         )
-    print(f"hourly grid verified against the frozen snapshot (max |diff| = {worst:.2e} deg C)")
+    if expected_rows is not None and len(raw) != expected_rows:
+        raise SystemExit(f"REFUSING TO OVERWRITE: {len(raw):,} raw rows, but the run read "
+                         f"{expected_rows:,} (raw_samples in run_manifest.json)")
+    print(f"hourly grid verified against the frozen snapshot (max |diff| = {worst:.2e} deg C, "
+          f"{len(raw):,} rows)")
 
     lines = [
         "# sha256 of the committed data files",

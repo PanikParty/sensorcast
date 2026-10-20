@@ -1,5 +1,5 @@
 # sha256 of the committed data files
-56c4b16f8788e97912220b0b9fc5c38e4b8a7710129812f3dd03ff98c64eadec  shelly_raw_samples.csv
+935b6c3716dd23271f2e3aee2d8d5b1016cd6de2d8e827574c81645d52ea0f1d  shelly_raw_samples.csv
 99366b9c75d4e7ccb3013d59d7d9c25b2a0a8779f2e404d96441bf60c6942dd8  shelly_hourly.csv
 203e6ee348cef750cd5f32ff1b34d9903b73d7c9d5b7fe130caa3b2f0cd28065  devices.csv
-# data cutoff (local): 2026-10-19 18:00:00-07:00
+# data cutoff (local): 2026-10-19 18:24:45-07:00

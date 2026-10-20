@@ -37,15 +37,21 @@ def check_data(results: Path) -> list[str]:
     hourly = data.load_snapshot(hourly_p)
     raw["col"] = raw["sensor"].map(data.slug)
     raw["time"] = pd.to_datetime(raw["ts"], unit="s", utc=True).dt.tz_convert(data.LOCAL_TZ).dt.floor("h")
-    rebuilt = raw.groupby(["col", "time"])["t_c"].mean().unstack()
+    # unstack the sensor level so the frame is (time x sensor) like the snapshot
+    rebuilt = raw.groupby(["col", "time"])["t_c"].mean().unstack("col")
     rebuilt = rebuilt.reindex(index=hourly.index, columns=hourly.columns)
     a, b = rebuilt.to_numpy(dtype=float), hourly.to_numpy(dtype=float)
-    same_mask = np.isnan(a) & np.isnan(b)
-    diff = np.where(same_mask, 0.0, np.abs(a - b))
-    worst = float(np.nanmax(diff)) if np.isfinite(diff).any() else 0.0
-    ok = worst < 1e-3
-    return [f"DATA      {'PASS' if ok else 'FAIL'}  hourly grid rebuilt from {len(raw):,} raw rows, "
-            f"max |diff| = {worst:.2e} deg C"]
+    # a cell present on one side and missing on the other is a mismatch, not a skip
+    nan_mismatch = np.isnan(a) != np.isnan(b)
+    both = ~np.isnan(a) & ~np.isnan(b)
+    worst = float(np.abs(a - b)[both].max()) if both.any() else float("nan")
+    ok = both.sum() == (~np.isnan(b)).sum() and not nan_mismatch.any() and worst < 1e-3
+    msgs = [f"DATA      {'PASS' if ok else 'FAIL'}  hourly grid rebuilt from {len(raw):,} raw rows, "
+            f"{int(both.sum()):,}/{int((~np.isnan(b)).sum()):,} cells compared, "
+            f"max |diff| = {worst:.2e} deg C, {int(nan_mismatch.sum())} missing/present mismatches"]
+    for i, j in list(zip(*np.nonzero(nan_mismatch)))[:10]:
+        msgs.append(f"          {hourly.index[i]}  {hourly.columns[j]}: rebuilt={a[i, j]:.3f} snapshot={b[i, j]:.3f}")
+    return msgs
 
 
 def check_metrics(results: Path) -> tuple[list[str], list[str]]:
