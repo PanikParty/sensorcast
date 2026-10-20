@@ -44,7 +44,7 @@ Yes for the numbers in `results/REPORT.md` — the artifacts are committed, not 
 | Device table (ids, firmware, model) | `results/data/devices.csv` |
 | Hourly benchmark input (1,295 h × 9 sensors) | `results/data/shelly_hourly.csv` |
 | SHA-256 of each of those files | `results/data/CHECKSUMS.txt` |
-| Every prediction (medians + quantiles, per window) | `results/forecasts.npz` |
+| Every prediction (medians + quantiles, per window) — main table **and** covariate arm | `results/forecasts.npz` |
 | Per-window scores for every model | `results/per_window_scores.csv` |
 | Aggregates used in the report | `results/summary.csv` |
 | Exact protocol, cutoff and environment | `results/run_manifest.json` |
@@ -61,6 +61,7 @@ That script does three independent re-derivations, using no model weights and no
 2. **Recomputes MAE/RMSE/MASE/WQL/coverage** for every (model, horizon) from
    `forecasts.npz` and compares against `summary.csv`.
 3. **Cross-checks per-window MAE** in `per_window_scores.csv` against the same predictions.
+4. **Audits the covariate arm** (oracle weather) against `covariate_arm.csv` the same way.
 
 Data integrity: the export is pinned to the run's `t_end` cutoff (`export_raw.py` refuses to
 overwrite the snapshot if the live database has moved on), so "the data" means one fixed
@@ -68,9 +69,9 @@ dataset — the same 1,295 hours every number was computed on. Checksums catch a
 
 What is **not** fully pinned, stated plainly:
 
-* **The covariate arm is not in `forecasts.npz`** — it needs a re-run of Timestral with
-  `known_covariates` (slow path), so those four numbers are reproducible from code but not
-  auditable offline from the dump. Everything in the main table is.
+* **The covariate arm lives in its own keys** (`cov_*`, described by
+  `covariate_manifest.json`) because it runs Timestral's slow covariate path.
+  `verify_scores.py` audits it exactly like the main table — all four numbers check out.
 * **Checkpoint weights resolve to the Hugging Face `main` revision** at download time. The
   exact snapshot commits used are recorded under `env.hf_snapshot_commits` in
   `run_manifest.json`, so they can be pinned with `revision=<commit>`, but the adapters do

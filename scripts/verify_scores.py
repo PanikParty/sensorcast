@@ -121,6 +121,55 @@ def check_metrics(results: Path) -> tuple[list[str], list[str]]:
     return msgs, failures
 
 
+def check_covariate(results: Path) -> tuple[list[str], list[str]]:
+    """Verify the covariate arm (oracle weather) against its committed predictions."""
+    man_p = results / "covariate_manifest.json"
+    if not man_p.exists():
+        return ["COVARIATE SKIP  covariate arm not dumped"], []
+    man = json.loads(man_p.read_text())
+    published = pd.read_csv(results / "covariate_arm.csv")
+    msgs, failures = [], []
+
+    with np.load(results / "forecasts.npz") as z:
+        for h in man["horizons"]:
+            y = z[f"cov_h{h}_y"]
+            scale = z[f"cov_h{h}_scale"]
+            for m in man["models"]:
+                key = f"cov_h{h}_{m}_median"
+                if key not in z.files:
+                    continue
+                med = z[key]
+                qkey = f"cov_h{h}_{m}_quantiles"
+                lkey = f"cov_h{h}_{m}_levels"
+                q = z[qkey] if qkey in z.files else None
+                levels = tuple(z[lkey]) if lkey in z.files else None
+                rows = [
+                    s for s in (
+                        metrics.score_window(
+                            y[i], med[i], q[i] if q is not None else None, levels,
+                            scale=float(scale[i]) if np.isfinite(scale[i]) else None,
+                        )
+                        for i in range(len(y))
+                    )
+                    if s
+                ]
+                pub = published[(published["model"] == m) & (published["horizon"] == h)]
+                if pub.empty or not rows:
+                    continue
+                worst = max(
+                    abs(float(np.mean([r[k] for r in rows if k in r])) - float(pub[k].iloc[0]))
+                    for k in ("mae", "mase", "rmse", "wql")
+                    if k in pub.columns and np.isfinite(pub[k].iloc[0])
+                )
+                ok = worst < TOL and len(rows) == int(pub["n_windows"].iloc[0])
+                line = (f"COVARIATE {'PASS' if ok else 'FAIL'}  {m:34s} @ {h:>2}h  "
+                        f"n={len(rows):4d}  max|Δ|={worst:.1e}")
+                msgs.append(line)
+                if not ok:
+                    failures.append(line)
+    return msgs, failures
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--results", default="results")
@@ -130,6 +179,9 @@ def main() -> None:
     msgs = check_data(results)
     metric_msgs, failures = check_metrics(results)
     msgs += metric_msgs
+    cov_msgs, cov_failures = check_covariate(results)
+    msgs += cov_msgs
+    failures += cov_failures
 
     for line in msgs:
         print(line)

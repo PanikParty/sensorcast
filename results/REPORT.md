@@ -8,8 +8,8 @@ Benchmark of Mistral **Timestral** (5M/28M/123M/209M) against Google **TimesFM 3
 - **24 h ahead** — **Timestral-209M** is best on aggregate MASE **0.802** (MAE 1.00 °C), 1.6× better than seasonal naive (1.250).
 - **Model size pays at 6 h** — 5M → 209M buys **10.5%** MASE (0.477 → 0.427) for **36× the CPU** (5 → 180 ms/series).
 - **Model size barely pays at 24 h** — 5M → 209M buys **1.3%** MASE (0.812 → 0.802) for **36× the CPU** (5 → 181 ms/series).
-- **Exogenous weather beats the model-size upgrade** — timestral-209M at 24 h: MASE **0.802 → 0.524** (**35% lower**) when handed the actual outdoor temperature across the horizon (oracle — see the covariate arm).
 - **Exogenous weather beats the model-size upgrade** — timestral-209M at 6 h: MASE **0.427 → 0.349** (**18% lower**) when handed the actual outdoor temperature across the horizon (oracle — see the covariate arm).
+- **Exogenous weather beats the model-size upgrade** — timestral-209M at 24 h: MASE **0.802 → 0.524** (**35% lower**) when handed the actual outdoor temperature across the horizon (oracle — see the covariate arm).
 - **6 h, sensor by sensor** — wins: TimesFM 3.0 (200M) 5/9, Timestral-209M 4/9.
 - **Interval calibration at 6 h** (nominal 80%) — Timestral-209M 83%, TimesFM 3.0 (200M) 70%, Chronos-Bolt-small 86%. Timestral's bands are close to nominal; TimesFM's are too narrow, so it looks sharper than it is on WQL while under-covering.
 - **24 h, sensor by sensor** — wins: Timestral-209M 5/9, Timestral-123M 2/9, Timestral-5M 2/9.

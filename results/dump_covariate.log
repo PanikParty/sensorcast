@@ -1,0 +1,13 @@
+h=24: 203 windows over 8 targets
+Fetching 2 files:   0%|          | 0/2 [00:00<?, ?it/s]Fetching 2 files: 100%|██████████| 2/2 [00:00<00:00, 1395.54it/s]
+  timestral-209M+oracle-weather      median (203, 24)
+Fetching 2 files:   0%|          | 0/2 [00:00<?, ?it/s]Fetching 2 files: 100%|██████████| 2/2 [00:00<00:00, 1567.38it/s]
+  timestral-28M+oracle-weather       median (203, 24)
+h=6: 209 windows over 8 targets
+Fetching 2 files:   0%|          | 0/2 [00:00<?, ?it/s]Fetching 2 files: 100%|██████████| 2/2 [00:00<00:00, 1641.93it/s]
+  timestral-209M+oracle-weather      median (209, 6)
+Fetching 2 files:   0%|          | 0/2 [00:00<?, ?it/s]Fetching 2 files: 100%|██████████| 2/2 [00:00<00:00, 1502.53it/s]
+  timestral-28M+oracle-weather       median (209, 6)
+
+-> results/forecasts.npz  (2.2 MB, 80 arrays)
+exit=0

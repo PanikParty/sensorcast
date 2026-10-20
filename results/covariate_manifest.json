@@ -1,0 +1,31 @@
+{
+  "covariate": "shed_north",
+  "targets": [
+    "bedroom",
+    "garage",
+    "kitchen",
+    "kyan",
+    "livingroom",
+    "office",
+    "saskia_s_room",
+    "shed"
+  ],
+  "horizons": [
+    24,
+    6
+  ],
+  "models": [
+    "timestral-209M+oracle-weather",
+    "timestral-28M+oracle-weather"
+  ],
+  "window_meta": {
+    "24": {
+      "n": 203,
+      "context_len": 504
+    },
+    "6": {
+      "n": 209,
+      "context_len": 504
+    }
+  }
+}
