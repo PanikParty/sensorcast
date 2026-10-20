@@ -4,15 +4,15 @@ Benchmark of Mistral **Timestral** (5M/28M/123M/209M) against Google **TimesFM 3
 
 ## Key findings
 
-- **6 h ahead** — **Timestral-209M** is best on aggregate MASE **0.427** (MAE 0.54 °C), 2.6× better than seasonal naive (1.111).
-- **24 h ahead** — **Timestral-209M** is best on aggregate MASE **0.802** (MAE 1.00 °C), 1.6× better than seasonal naive (1.250).
-- **Model size pays at 6 h** — 5M → 209M buys **10.5%** MASE (0.477 → 0.427) for **36× the CPU** (5 → 180 ms/series).
-- **Model size barely pays at 24 h** — 5M → 209M buys **1.3%** MASE (0.812 → 0.802) for **36× the CPU** (5 → 181 ms/series).
-- **Exogenous weather beats the model-size upgrade** — timestral-209M at 6 h: MASE **0.427 → 0.349** (**18% lower**) when handed the actual outdoor temperature across the horizon (oracle — see the covariate arm).
-- **Exogenous weather beats the model-size upgrade** — timestral-209M at 24 h: MASE **0.802 → 0.524** (**35% lower**) when handed the actual outdoor temperature across the horizon (oracle — see the covariate arm).
+- **6 h ahead** — **Timestral-209M** has the lowest aggregate MASE **0.427** (MAE 0.54 °C), **statistically tied** with TimesFM 3.0 (200M) (0.432; 95% CI of the gap -0.049 to +0.044); 2.6× better than seasonal naive (1.111).
+- **24 h ahead** — **Timestral-209M** has the lowest aggregate MASE **0.802** (MAE 1.00 °C), **statistically tied** with Timestral-123M (0.810; 95% CI of the gap -0.031 to +0.012); 1.6× better than seasonal naive (1.250).
+- **Model size pays at 6 h** — 5M → 209M buys **10.5%** MASE (0.477 → 0.427; 95% CI of the gap -0.083 to -0.018, the gap is outside the noise) for **36× the CPU** (5 → 180 ms/series).
+- **Model size does not clearly pay at 24 h** — 5M → 209M buys **1.3%** MASE (0.812 → 0.802; 95% CI of the gap -0.045 to +0.026, the gap is within the noise) for **36× the CPU** (5 → 181 ms/series).
+- **Exogenous weather is worth about as much as the model-size upgrade** — timestral-209M at 6 h: MASE **0.402 → 0.349** (**13% lower**, same 209 windows) when handed the actual outdoor temperature across the horizon (oracle — see the covariate arm).
+- **Exogenous weather beats the model-size upgrade** — timestral-209M at 24 h: MASE **0.789 → 0.524** (**34% lower**, same 203 windows) when handed the actual outdoor temperature across the horizon (oracle — see the covariate arm).
 - **6 h, sensor by sensor** — wins: TimesFM 3.0 (200M) 5/9, Timestral-209M 4/9.
 - **Interval calibration at 6 h** (nominal 80%) — Timestral-209M 83%, TimesFM 3.0 (200M) 70%, Chronos-Bolt-small 86%. Timestral's bands are close to nominal; TimesFM's are too narrow, so it looks sharper than it is on WQL while under-covering.
-- **24 h, sensor by sensor** — wins: Timestral-209M 5/9, Timestral-123M 2/9, Timestral-5M 2/9.
+- **24 h, sensor by sensor** — wins: Timestral-209M 5/9, Timestral-5M 2/9, Timestral-123M 1/9; tied 1/9 (garage: Timestral-123M = Timestral-209M).
 - **Interval calibration at 24 h** (nominal 80%) — Timestral-209M 80%, TimesFM 3.0 (200M) 72%, Chronos-Bolt-small 80%. Timestral's bands are close to nominal; TimesFM's are too narrow, so it looks sharper than it is on WQL while under-covering.
 
 ## Dataset
@@ -85,12 +85,14 @@ Benchmark of Mistral **Timestral** (5M/28M/123M/209M) against Google **TimesFM 3
 
 Timestral accepts a *known-future* covariate. We fed it the real outdoor sensor (`shed_north`, sun-exposed, best uptime) across the horizon. That is an **oracle** — a real deployment would need a weather forecast — so read it as an upper bound on what exogenous weather information could buy, not as an achievable score.
 
-| horizon | model | mae | mase |
-| --- | --- | --- | --- |
-| 6 | timestral-209M+oracle-weather | 0.393 | 0.349 |
-| 6 | timestral-28M+oracle-weather | 0.427 | 0.381 |
-| 24 | timestral-209M+oracle-weather | 0.603 | 0.524 |
-| 24 | timestral-28M+oracle-weather | 0.621 | 0.542 |
+`shed_north` is the input here, so it is not a forecast target: the arm scores the other 8 sensors. `mase without` is the same model with no covariate on those same windows, so the two columns compare like with like.
+
+| horizon | model | mae | mase without | mase | n_windows |
+| --- | --- | --- | --- | --- | --- |
+| 6 | timestral-209M+oracle-weather | 0.393 | 0.402 | 0.349 | 209 |
+| 6 | timestral-28M+oracle-weather | 0.427 | 0.440 | 0.381 | 209 |
+| 24 | timestral-209M+oracle-weather | 0.603 | 0.789 | 0.524 | 203 |
+| 24 | timestral-28M+oracle-weather | 0.621 | 0.803 | 0.542 | 203 |
 
 ## Latency (this box: Intel N150, 4 cores, CPU-only)
 
@@ -125,12 +127,12 @@ Timestral accepts a *known-future* covariate. We fed it the real outdoor sensor 
 
 - At **6 h**, run **Timestral-28M**: MASE 0.460 versus 0.427 for 209M (7.9% worse) at a fraction of the CPU cost — the right default for a household forecast (`scripts/forecast_now.py` uses it).
 - At **24 h**, run **Timestral-28M**: MASE 0.816 versus 0.802 for 209M (1.7% worse) at a fraction of the CPU cost — the right default for a household forecast (`scripts/forecast_now.py` uses it).
-- **The next real gain is not a bigger model, it is a weather input.** Handing the model the actual outdoor temperature (even as an oracle) cut MASE far more than any size step. Wiring a real forecast feed into the covariate slot is the highest-value follow-up.
+- **The next real gain is not a bigger model, it is a weather input.** Handing the model the actual outdoor temperature (even as an oracle) cut MASE more than any size step, by a wide margin at 24 h. Wiring a real forecast feed into the covariate slot is the highest-value follow-up.
 
 ## Honest caveats
 
 - **54 days is short.** Diurnal cycles are well represented; seasonal drift is not. These numbers say nothing about a winter/summer transition.
-- **The sensors are not independent.** Indoor rooms share HVAC and outdoor weather; windows overlap in time, so the effective sample size is smaller than the window count.
+- **The sensors are not independent.** Indoor rooms share HVAC and outdoor weather; windows overlap in time, so the effective sample size is smaller than the window count. The confidence intervals above account for this by resampling whole forecast origins, not single windows.
 - **Timestral's leaderboard wins are self-reported by Mistral** and, at launch, had not cleared external review. This benchmark is independent of that claim but is also *our* data only — 9 series, one house, one season.
 - **Nothing here is tuned.** No context-length sweep, no per-sensor scaling, no ensembling. A tuned Timestral would score better than these numbers; so might the others.
 - MASE is computed against an in-context scale, so a window whose context is unusually calm shows a harsher MASE. Read MAE/RMSE alongside it.

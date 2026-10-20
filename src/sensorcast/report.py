@@ -49,19 +49,54 @@ def _mase(agg, model, horizon):
     return float(d.iloc[0]) if len(d) else float("nan")
 
 
-def _key_findings(agg, per_window, cov_agg) -> list[str]:
+def _matched_mase(per_window, model, horizon, covariate):
+    """Mean MASE of ``model`` without the covariate sensor -- the covariate arm's target set."""
+    d = per_window[(per_window["model"] == model) & (per_window["horizon"] == horizon)
+                   & (per_window["device"] != covariate)]["mase"]
+    return float(d.mean()) if len(d) else float("nan")
+
+
+def _paired_ci(per_window, a, b, horizon, n_boot=5000, seed=0):
+    """Mean per-window MASE difference a - b with a 95% bootstrap CI.
+
+    Resamples whole forecast origins, not windows: the sensors share a house, so
+    windows cast at the same origin are correlated and do not count separately.
+    """
+    d = per_window[per_window["horizon"] == horizon]
+    piv = d.pivot_table(index=["device", "origin"], columns="model", values="mase").dropna(subset=[a, b])
+    diff = pd.DataFrame({"d": piv[a] - piv[b], "o": piv.index.get_level_values("origin")})
+    g = diff.groupby("o")["d"].agg(["sum", "count"])
+    s, c = g["sum"].to_numpy(), g["count"].to_numpy()
+    idx = np.random.default_rng(seed).integers(0, len(g), (n_boot, len(g)))
+    boot = s[idx].sum(axis=1) / c[idx].sum(axis=1)
+    lo, hi = np.percentile(boot, [2.5, 97.5])
+    return float(diff["d"].mean()), float(lo), float(hi)
+
+
+def _resolved(lo, hi) -> bool:
+    return lo > 0 or hi < 0
+
+
+def _key_findings(agg, per_window, cov_agg, covariate="shed_north") -> list[str]:
     out = []
     hs = sorted(agg["horizon"].unique())
     for h in hs:
         d = agg[(agg["horizon"] == h) & agg["mase"].notna()].sort_values("mase")
         if d.empty:
             continue
-        top = d.iloc[0]
+        top, second = d.iloc[0], d.iloc[1]
         sn = _mase(agg, "seasonal_naive", h)
+        _, lo, hi = _paired_ci(per_window, top["model"], second["model"], h)
+        if _resolved(lo, hi):
+            vs = (f"ahead of runner-up {PRETTY.get(second['model'], second['model'])} "
+                  f"({second['mase']:.3f}; 95% CI of the gap {lo:+.3f} to {hi:+.3f})")
+        else:
+            vs = (f"**statistically tied** with {PRETTY.get(second['model'], second['model'])} "
+                  f"({second['mase']:.3f}; 95% CI of the gap {lo:+.3f} to {hi:+.3f})")
         out.append(
-            f"- **{h} h ahead** — **{PRETTY.get(top['model'], top['model'])}** is best on aggregate "
-            f"MASE **{top['mase']:.3f}** (MAE {top['mae']:.2f} °C), {sn / top['mase']:.1f}× better than "
-            f"seasonal naive ({sn:.3f})."
+            f"- **{h} h ahead** — **{PRETTY.get(top['model'], top['model'])}** has the lowest aggregate "
+            f"MASE **{top['mase']:.3f}** (MAE {top['mae']:.2f} °C), {vs}; {sn / top['mase']:.1f}× better "
+            f"than seasonal naive ({sn:.3f})."
         )
 
     # does model size buy anything?
@@ -74,35 +109,57 @@ def _key_findings(agg, per_window, cov_agg) -> list[str]:
             }
             gain = 100 * (sizes["5M"] - sizes["209M"]) / sizes["5M"]
             ratio = lat["209M"] / max(lat["5M"], 1e-9)
-            verdict = "barely pays" if gain < 5 else "pays"
+            _, lo, hi = _paired_ci(per_window, "timestral-209M", "timestral-5M", h)
+            if _resolved(lo, hi) and gain >= 5:
+                verdict, note = "pays", "the gap is outside the noise"
+            else:
+                verdict, note = "does not clearly pay", "the gap is within the noise"
             out.append(
                 f"- **Model size {verdict} at {h} h** — 5M → 209M buys **{gain:.1f}%** MASE "
-                f"({sizes['5M']:.3f} → {sizes['209M']:.3f}) for **{ratio:.0f}× the CPU** "
-                f"({lat['5M']:.0f} → {lat['209M']:.0f} ms/series)."
+                f"({sizes['5M']:.3f} → {sizes['209M']:.3f}; 95% CI of the gap {lo:+.3f} to {hi:+.3f}, "
+                f"{note}) for **{ratio:.0f}× the CPU** ({lat['5M']:.0f} → {lat['209M']:.0f} ms/series)."
             )
 
     if cov_agg is not None and len(cov_agg):
-        # one bullet per horizon, for the flagship model only
+        # one bullet per horizon, for the flagship model only; the baseline is scored on the
+        # same target sensors as the covariate arm (the covariate sensor is not a target there)
         row = cov_agg[cov_agg["model"].str.contains("209M")]
         for _, r in (row if len(row) else cov_agg).iterrows():
             base_model = r["model"].split("+")[0]
-            b = _mase(agg, base_model, r["horizon"])
+            b = _matched_mase(per_window, base_model, int(r["horizon"]), covariate)
+            s5, s209 = (_mase(agg, f"timestral-{s}", r["horizon"]) for s in ("5M", "209M"))
+            size_gain = (s5 - s209) / s5 if np.isfinite(s5) and np.isfinite(s209) else 0.0
+            cov_gain = (b - r["mase"]) / b if np.isfinite(b) else 0.0
+            # only claim "beats" when weather is worth clearly more than the whole size ladder
+            headline = ("Exogenous weather beats the model-size upgrade" if cov_gain > 2 * size_gain
+                        else "Exogenous weather is worth about as much as the model-size upgrade")
             if np.isfinite(b):
                 out.append(
-                    f"- **Exogenous weather beats the model-size upgrade** — {base_model} at "
+                    f"- **{headline}** — {base_model} at "
                     f"{int(r['horizon'])} h: MASE **{b:.3f} → {r['mase']:.3f}** "
-                    f"(**{100*(b-r['mase'])/b:.0f}% lower**) when handed the actual outdoor "
-                    f"temperature across the horizon (oracle — see the covariate arm)."
+                    f"(**{100*(b-r['mase'])/b:.0f}% lower**, same {int(r['n_windows'])} windows) when "
+                    f"handed the actual outdoor temperature across the horizon (oracle — see the "
+                    f"covariate arm)."
                 )
 
-    # per-sensor winners
+    # per-sensor winners; models within 0.0005 of the best (equal at the 3 dp shown) share the win
     for h in hs:
         d = per_window[(per_window["horizon"] == h) & per_window["mase"].notna()]
         if d.empty:
             continue
         piv = d.pivot_table(index="device", columns="model", values="mase", aggfunc="mean")
-        wins = piv.idxmin(axis=1).value_counts()
-        txt = ", ".join(f"{PRETTY.get(k, k)} {v}/{len(piv)}" for k, v in wins.items())
+        wins: dict[str, int] = {}
+        ties = []
+        for dev, row in piv.iterrows():
+            best = row[row <= row.min() + 5e-4].index.tolist()
+            if len(best) == 1:
+                wins[best[0]] = wins.get(best[0], 0) + 1
+            else:
+                ties.append(f"{dev}: " + " = ".join(PRETTY.get(m, m) for m in best))
+        txt = ", ".join(f"{PRETTY.get(k, k)} {v}/{len(piv)}"
+                        for k, v in sorted(wins.items(), key=lambda kv: -kv[1]))
+        if ties:
+            txt += f"; tied {len(ties)}/{len(piv)} ({'; '.join(ties)})"
         out.append(f"- **{h} h, sensor by sensor** — wins: {txt}.")
         t = per_window[(per_window["horizon"] == h)]
         cal = {}
@@ -141,7 +198,8 @@ def build(
     )
 
     L.append("## Key findings\n")
-    L.extend(_key_findings(agg, per_window, covariate_agg))
+    covariate = cfg.get("covariate", "shed_north")
+    L.extend(_key_findings(agg, per_window, covariate_agg, covariate))
     L.append("")
 
     L.append("## Dataset\n")
@@ -209,14 +267,20 @@ def build(
         L.append("## Covariate arm — does tomorrow's outdoor temperature help?\n")
         L.append(
             "Timestral accepts a *known-future* covariate. We fed it the real outdoor sensor "
-            "(`shed_north`, sun-exposed, best uptime) across the horizon. That is an **oracle** — a "
+            f"(`{covariate}`, sun-exposed, best uptime) across the horizon. That is an **oracle** — a "
             "real deployment would need a weather forecast — so read it as an upper bound on what "
-            "exogenous weather information could buy, not as an achievable score.\n"
+            "exogenous weather information could buy, not as an achievable score.\n\n"
+            f"`{covariate}` is the input here, so it is not a forecast target: the arm scores the other "
+            f"{per_window['device'].nunique() - 1} sensors. `mase without` is the same model with no "
+            "covariate on those same windows, so the two columns compare like with like.\n"
         )
         c = covariate_agg.copy()
+        c["mase without"] = [_matched_mase(per_window, m.split("+")[0], int(h), covariate)
+                             for m, h in zip(c["model"], c["horizon"])]
         c["model"] = c["model"].map(lambda m: PRETTY.get(m, m))
-        L.append(md_table(c.sort_values(["horizon", "mase"]), ["horizon", "model", "mae", "mase"],
-                          intcols=("horizon",)))
+        L.append(md_table(c.sort_values(["horizon", "mase"]),
+                          ["horizon", "model", "mae", "mase without", "mase", "n_windows"],
+                          intcols=("horizon", "n_windows")))
         L.append("")
 
     L.append("## Latency (this box: Intel N150, 4 cores, CPU-only)\n")
@@ -249,7 +313,8 @@ def build(
             )
     L.append(
         "- **The next real gain is not a bigger model, it is a weather input.** Handing the model the "
-        "actual outdoor temperature (even as an oracle) cut MASE far more than any size step. Wiring a "
+        "actual outdoor temperature (even as an oracle) cut MASE more than any size step, by a wide margin "
+        "at 24 h. Wiring a "
         "real forecast feed into the covariate slot is the highest-value follow-up.\n"
     )
 
@@ -258,7 +323,8 @@ def build(
         "- **54 days is short.** Diurnal cycles are well represented; seasonal drift is not. These "
         "numbers say nothing about a winter/summer transition.\n"
         "- **The sensors are not independent.** Indoor rooms share HVAC and outdoor weather; windows "
-        "overlap in time, so the effective sample size is smaller than the window count.\n"
+        "overlap in time, so the effective sample size is smaller than the window count. The confidence "
+        "intervals above account for this by resampling whole forecast origins, not single windows.\n"
         "- **Timestral's leaderboard wins are self-reported by Mistral** and, at launch, had not cleared "
         "external review. This benchmark is independent of that claim but is also *our* data only — "
         "9 series, one house, one season.\n"

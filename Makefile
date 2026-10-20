@@ -11,7 +11,7 @@ setup: ## create venv and install package + model dependencies
 	uv venv --python 3.12 $(VENV)
 	uv pip install -e ".[models,dev]"
 
-bench: ## full benchmark -> results/ + REPORT.md (~8 min, CPU only)
+bench: ## full benchmark -> results/ + REPORT.md (~14 min, CPU only)
 	$(PY) scripts/run_benchmark.py --out results
 
 quick: ## fast slice: 24h horizon, two models

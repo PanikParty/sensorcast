@@ -15,20 +15,30 @@ rather than a leaderboard screenshot.
   4. Timestral-28M    ███████████████████████████▌ 0.816
   5. TimesFM 3.0      ███████████████████████████████ 0.905
   6. Chronos-Bolt     ████████████████████████████████ 0.923
-  9. seasonal naive   ███████████████████████████████████████ 1.250
+  7. drift            █████████████████████████████████████▍ 1.199
+  8. seasonal naive   ███████████████████████████████████████ 1.250
 ```
+
+The top four are one Timestral family within 0.014 of each other — a statistical tie at 24 h
+(95 % bootstrap intervals, resampling whole forecast origins). Timestral's lead over TimesFM
+and Chronos-Bolt at 24 h is outside that noise.
 
 Three things fell out of the run (full tables in [`results/REPORT.md`](results/REPORT.md)):
 
-1. **Timestral wins on aggregate, and it is not close at 6 h.** MASE 0.427 vs 1.111
-   for seasonal naive — a 2.6× reduction in scaled error with no training.
-2. **Model size is nearly free of value past 5M at 24 h.** 5M → 209M buys **1.3 %** MASE
-   for **36× the CPU** (5 → 181 ms/series on this box). At 6 h the jump is worth 10.5 %.
-   The 28M checkpoint is the sane default for a household forecast.
-3. **The biggest lever is not the model at all.** Handing Timestral the actual outdoor
-   temperature as a known-future covariate cut 24 h MASE **0.802 → 0.524 (−35 %)** — more
-   than any size step, and more than any competitor managed. (Oracle experiment: the
-   covariate is the true future outdoor reading, not a forecast.)
+1. **Timestral wins at 24 h; at 6 h it ties TimesFM.** Both horizons crush the baselines —
+   at 6 h MASE 0.427 vs 1.111 for seasonal naive, a 2.6× reduction in scaled error with no
+   training — but at 6 h Timestral-209M (0.427) and TimesFM 3.0 (0.432) are
+   indistinguishable on this data.
+2. **Model size is nearly free of value past 5M at 24 h.** 5M → 209M buys **1.3 %** MASE —
+   within the noise — for **36× the CPU** (5 → 181 ms/series on this box). At 6 h the jump
+   is worth 10.5 % and is real. The 28M checkpoint is the sane default for a household
+   forecast.
+3. **The biggest lever at 24 h is not the model at all.** Handing Timestral-209M the actual
+   outdoor temperature as a known-future covariate cut 24 h MASE **0.789 → 0.524 (−34 %)**
+   on the same 8 sensors — more than any size step, and lower than any competitor scored.
+   At 6 h the gain is −13 %, about what the size upgrade buys. (Oracle experiment: the
+   covariate is the true future outdoor reading, not a forecast; the outdoor sensor itself
+   is the input, so it is not scored.)
 
 TimesFM is genuinely competitive at 6 h (best on 5 of 9 individual sensors) but its 80 %
 interval only covers 70 % of outcomes — it *looks* sharper than it is on quantile loss.
@@ -40,7 +50,7 @@ Yes for the numbers in `results/REPORT.md` — the artifacts are committed, not 
 
 | what | where |
 |---|---|
-| Raw readings from all 9 sensors (13,851 rows, unresampled) | `results/data/shelly_raw_samples.csv` |
+| Raw readings from all 9 sensors (13,858 rows, unresampled) | `results/data/shelly_raw_samples.csv` |
 | Device table (ids, firmware, model) | `results/data/devices.csv` |
 | Hourly benchmark input (1,295 h × 9 sensors) | `results/data/shelly_hourly.csv` |
 | SHA-256 of each of those files | `results/data/CHECKSUMS.txt` |
@@ -54,18 +64,21 @@ Yes for the numbers in `results/REPORT.md` — the artifacts are committed, not 
 python scripts/verify_scores.py      # exit 0 = every published number reproduces
 ```
 
-That script does three independent re-derivations, using no model weights and no GPU:
+That script does four independent re-derivations, using no model weights and no GPU:
 
 1. **Rebuilds the hourly grid** from the raw readings and asserts it matches the committed
-   snapshot cell-for-cell (proves the resample, not just that a CSV exists).
+   snapshot cell-for-cell — values within CSV rounding, and a reading present on one side
+   but missing on the other is a failure (proves the resample, not just that a CSV exists).
 2. **Recomputes MAE/RMSE/MASE/WQL/coverage** for every (model, horizon) from
    `forecasts.npz` and compares against `summary.csv`.
 3. **Cross-checks per-window MAE** in `per_window_scores.csv` against the same predictions.
 4. **Audits the covariate arm** (oracle weather) against `covariate_arm.csv` the same way.
 
-Data integrity: the export is pinned to the run's `t_end` cutoff (`export_raw.py` refuses to
-overwrite the snapshot if the live database has moved on), so "the data" means one fixed
-dataset — the same 1,295 hours every number was computed on. Checksums catch any edit.
+Data integrity: the export is pinned to the moment the run read the database (18:24:45 local,
+from `results/run.log`, so the last hour is a partial hour), and `export_raw.py` refuses to
+overwrite unless the export rebuilds the frozen grid exactly and has the run's row count. So
+"the data" means one fixed dataset — the same 1,295 hours every number was computed on.
+Checksums catch any edit.
 
 What is **not** fully pinned, stated plainly:
 
