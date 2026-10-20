@@ -2,8 +2,8 @@
 """Rebuild REPORT.md (and the example-forecast figure) from saved result files.
 
 Does not re-run the benchmark: reads results/summary.csv, per_window_scores.csv,
-covariate_arm.csv and run_manifest.json.  Only the single example window needs a
-model call (~5 s).
+covariate_arm.csv, forecasts.npz and run_manifest.json.  Only the single example window
+needs a model call (~5 s).
 
     python scripts/make_report.py --results results
 """
@@ -48,6 +48,15 @@ def main() -> None:
     figures += [plots.accuracy_bars(agg, out, "mase"), plots.accuracy_bars(agg, out, "mae")]
     for h in sorted(per_window["horizon"].unique()):
         figures.append(plots.device_heatmap(per_window, out, h))
+
+    # forecast vs actual for every sensor, from the stored predictions (no model calls);
+    # longest horizon only -- shorter ones leave gaps between the 12 h-spaced origins
+    fz = out / "forecasts.npz"
+    if fz.exists():
+        h = max(cfg["horizons"])
+        with np.load(fz) as z:
+            if f"h{h}_device" in z.files:
+                figures.append(plots.forecast_vs_actual(wide, z, out, h, per_window))
 
     npz = out / "step_errors.npz"
     for h in sorted(per_window["horizon"].unique()):

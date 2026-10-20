@@ -8,6 +8,8 @@ import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.dates  # noqa: E402
+import matplotlib.lines  # noqa: E402
+import matplotlib.patches  # noqa: E402
 import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
@@ -165,6 +167,77 @@ def device_heatmap(per_window: pd.DataFrame, out: Path, horizon: int, metric: st
     fig.colorbar(im, ax=ax, shrink=0.8)
     fig.tight_layout()
     p = out / f"fig_device_heatmap_{horizon}h.png"
+    fig.savefig(p)
+    plt.close(fig)
+    return p
+
+
+def forecast_vs_actual(
+    wide: pd.DataFrame,
+    forecasts,
+    out: Path,
+    horizon: int,
+    per_window: pd.DataFrame | None = None,
+    models: tuple[str, ...] = ("timestral-209M", "timesfm-3.0"),
+) -> Path:
+    """Every sensor, the whole evaluation span: observed temperature vs the stored forecasts.
+
+    ``forecasts`` is the ``results/forecasts.npz`` archive.  Origins are 12 h apart, so a
+    24 h horizon would overlap itself; only the origins on the newest origin's phase
+    (newest, then every ``horizon`` hours back) are drawn, which tiles the span end to end.
+    That is a fixed rule, not a pick of good windows -- the panel labels quote the MASE
+    over *all* windows.  One shared y-axis, so sensors are comparable at a glance.
+    """
+    pre = f"h{horizon}_"
+    dev = forecasts[pre + "device"].astype(str)
+    org = pd.to_datetime(forecasts[pre + "origin"], unit="s", utc=True).tz_convert(wide.index.tz)
+    levels = [tuple(np.round(forecasts[f"{pre}{m}_levels"], 2)) for m in models[:1]]
+    lo_i, hi_i = levels[0].index(0.1), levels[0].index(0.9)
+    devices = sorted(set(dev))
+    span = (org.min() - pd.Timedelta(hours=24), org.max() + pd.Timedelta(hours=horizon))
+
+    fig, axes = plt.subplots(len(devices), 1, figsize=(10.5, 1.45 * len(devices) + 1.0),
+                             sharex=True, sharey=True, squeeze=False)
+    ink, grid = "#0b0b0b", "#c3c2b7"
+    for ax, d in zip(axes[:, 0], devices):
+        idx = np.flatnonzero(dev == d)
+        newest = org[idx].max()
+        keep = [i for i in idx if ((newest - org[i]) / pd.Timedelta(hours=1)) % horizon == 0]
+        for i in keep:
+            ft = pd.date_range(org[i], periods=horizon, freq="1h")
+            ax.axvline(org[i], color=grid, lw=0.6, zorder=1)
+            q = forecasts[f"{pre}{models[0]}_quantiles"][i]
+            ax.fill_between(ft, q[:, lo_i], q[:, hi_i], color=LEADTIME_STYLE[models[0]]["color"],
+                            alpha=0.18, lw=0, zorder=2)
+            for m in models:
+                ax.plot(ft, forecasts[f"{pre}{m}_median"][i], color=LEADTIME_STYLE[m]["color"],
+                        lw=1.3, zorder=3)
+        obs = wide.loc[span[0] : span[1], d]
+        ax.plot(obs.index, obs.to_numpy(), color=ink, lw=1.0, marker=".", ms=2.2, zorder=4)
+        label = d
+        if per_window is not None:
+            s = per_window[(per_window["horizon"] == horizon) & (per_window["device"] == d)]
+            ms = [f"{m} {s[s['model'] == m]['mase'].mean():.2f}" for m in models]
+            label += "   MASE " + " · ".join(ms)
+        ax.text(0.005, 0.96, label, transform=ax.transAxes, va="top", fontsize=7.5, color=ink,
+                bbox=dict(facecolor="white", edgecolor="none", alpha=0.8, pad=1.5))
+        ax.tick_params(labelsize=7)
+    axes[-1, 0].xaxis.set_major_formatter(matplotlib.dates.DateFormatter("%b %d"))
+    axes[-1, 0].set_xlim(*span)
+    fig.supylabel("deg C", fontsize=8)
+
+    handles = [matplotlib.lines.Line2D([], [], color=ink, lw=1.0, marker=".", ms=4, label="observed")]
+    handles += [matplotlib.lines.Line2D([], [], color=LEADTIME_STYLE[m]["color"], lw=1.6, label=f"{m} median")
+                for m in models]
+    handles += [matplotlib.patches.Patch(color=LEADTIME_STYLE[models[0]]["color"], alpha=0.18,
+                                         label=f"{models[0]} 10-90%"),
+                matplotlib.lines.Line2D([], [], color=grid, lw=0.8, label="forecast issued")]
+    fig.suptitle(f"Forecast vs actual, every sensor — {horizon} h forecasts issued every {horizon} h "
+                 f"at {newest:%H:%M}, gaps = sensor offline", fontsize=10, fontweight="bold")
+    fig.legend(handles=handles, loc="upper center", bbox_to_anchor=(0.5, 0.975), ncol=len(handles),
+               frameon=False, fontsize=7.5)
+    fig.tight_layout(rect=(0, 0, 1, 0.96))
+    p = out / f"fig_forecast_vs_actual_{horizon}h.png"
     fig.savefig(p)
     plt.close(fig)
     return p

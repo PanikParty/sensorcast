@@ -168,7 +168,8 @@ src/sensorcast/
   models.py     one adapter per forecaster; quantiles resampled to a common grid
   evaluate.py   rolling-origin windows, scoring, aggregation
   metrics.py    MAE/RMSE/MASE/WQL/coverage
-  plots.py      accuracy bars, lead-time curves, per-sensor heatmap, example forecast
+  plots.py      accuracy bars, lead-time curves, per-sensor heatmap, forecast vs actual
+                for every sensor, example forecast
   report.py     renders results/REPORT.md
 scripts/
   run_benchmark.py   end-to-end driver (models, covariate arm, figures, report)
