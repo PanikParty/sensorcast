@@ -111,8 +111,6 @@ Timestral accepts a *known-future* covariate. We fed it the real outdoor sensor 
 
 ![fig_device_heatmap_6h](fig_device_heatmap_6h.png)
 
-![fig_example_bedroom](fig_example_bedroom.png)
-
 ![fig_example_livingroom](fig_example_livingroom.png)
 
 ![fig_leadtime_24h](fig_leadtime_24h.png)

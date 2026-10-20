@@ -40,19 +40,26 @@ def main() -> None:
     wide = data.load_snapshot(snap)
     coverage = data.coverage(wide)
 
-    figures = sorted(out.glob("fig_*.png"))
+    # Explicit figure list -- never glob, or stale charts from earlier runs sneak
+    # into the report as broken links.
+    figures: list[Path] = []
 
     # regenerate the aggregate figures from the saved scores (no model calls)
     figures += [plots.accuracy_bars(agg, out, "mase"), plots.accuracy_bars(agg, out, "mae")]
     for h in sorted(per_window["horizon"].unique()):
         figures.append(plots.device_heatmap(per_window, out, h))
+
     npz = out / "step_errors.npz"
-    if npz.exists():
-        with np.load(npz) as z:
-            for h in sorted(per_window["horizon"].unique()):
+    for h in sorted(per_window["horizon"].unique()):
+        if npz.exists():
+            with np.load(npz) as z:
                 errs = {k.split("|")[0]: z[k] for k in z.files if k.endswith(f"|{h}")}
-                if errs:
-                    figures.append(plots.leadtime_curves(errs, out, h))
+            if errs:
+                figures.append(plots.leadtime_curves(errs, out, h))
+                continue
+        existing = out / f"fig_leadtime_{h}h.png"
+        if existing.exists():  # produced by the run itself, not regenerated here
+            figures.append(existing)
     figures = sorted(set(figures))
 
     # refresh the example window chart
