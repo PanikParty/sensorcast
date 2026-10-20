@@ -1,0 +1,18 @@
+# environment
+.venv/
+.venv*/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.egg-info/
+.ipynb_checkpoints/
+
+# model weights / caches are never committed
+~/.cache/
+.cache/
+*.safetensors
+
+# local scratch
+/results/tmp/
+*.log.tmp
+.DS_Store

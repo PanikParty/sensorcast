@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sensorcast"
+version = "0.1.0"
+description = "Zero-shot time-series forecasting benchmark on live Shelly H&T temperature sensors"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = [
+    "numpy>=1.24",
+    "pandas>=2.0",
+    "matplotlib>=3.8",
+    "torch>=2.4",
+    "huggingface_hub>=0.23",
+    "safetensors>=0.4",
+]
+
+[project.optional-dependencies]
+# The forecasters under test.  All are CPU-capable; no GPU required.
+models = [
+    "timestral @ git+https://github.com/mistralai/timestral.git",
+    "chronos-forecasting>=2.0",
+    "timesfm>=3.0",
+]
+dev = ["pytest>=8"]
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -1,0 +1,146 @@
+"""Charts for the report.  Headless matplotlib only."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import matplotlib
+
+matplotlib.use("Agg")
+import matplotlib.dates  # noqa: E402
+import matplotlib.pyplot as plt  # noqa: E402
+import numpy as np  # noqa: E402
+import pandas as pd  # noqa: E402
+
+plt.rcParams.update(
+    {
+        "figure.dpi": 130,
+        "axes.spines.top": False,
+        "axes.spines.right": False,
+        "font.size": 9,
+        "axes.titlesize": 10,
+        "axes.titleweight": "bold",
+    }
+)
+
+FAMILY_COLORS = {
+    "timestral": "#c2410c",
+    "timesfm": "#1d4ed8",
+    "chronos": "#047857",
+    "baseline": "#6b7280",
+}
+
+
+def _color(model: str) -> str:
+    for k, v in FAMILY_COLORS.items():
+        if model.startswith(k):
+            return v
+    return "#111827"
+
+
+def accuracy_bars(agg: pd.DataFrame, out: Path, metric: str = "mase") -> Path:
+    horizons = sorted(agg["horizon"].unique())
+    fig, axes = plt.subplots(1, len(horizons), figsize=(5.0 * len(horizons), 3.6), squeeze=False)
+    for ax, h in zip(axes[0], horizons):
+        # best first in the frame, then invert the axis so rank 1 sits at the top
+        d = agg[(agg["horizon"] == h) & agg[metric].notna()].sort_values(metric, ascending=True)
+        labels = [f"{i + 1}. {m}" for i, m in enumerate(d["model"])]
+        ax.barh(labels, d[metric], color=[_color(m) for m in d["model"]])
+        ax.invert_yaxis()
+        ax.axvline(1.0, color="#111827", lw=1.2, ls="--", zorder=3)
+        ax.set_title(f"{metric.upper()} @ {h}h horizon")
+        ax.set_xlabel(metric.upper() + "  (lower is better; 1.0 = seasonal naive)")
+        for y, v in enumerate(d[metric]):
+            ax.text(v, y, f" {v:.3f}", va="center", fontsize=7.5)
+        ax.margins(x=0.18)
+    fig.tight_layout()
+    p = out / f"fig_{metric}_by_model.png"
+    fig.savefig(p)
+    plt.close(fig)
+    return p
+
+
+def leadtime_curves(err: dict[str, np.ndarray], out: Path, horizon: int) -> Path:
+    fig, ax = plt.subplots(figsize=(6.4, 3.8))
+    for model, arr in err.items():
+        if arr.shape[1] != horizon:
+            continue
+        rmse = np.sqrt(np.nanmean(arr**2, axis=0))
+        ax.plot(np.arange(1, horizon + 1), rmse, label=model, color=_color(model), lw=1.7)
+    ax.set_xlabel("lead time (hours ahead)")
+    ax.set_ylabel("RMSE (deg C)")
+    ax.set_title(f"Error growth over the horizon ({horizon} h)")
+    ax.legend(frameon=False, fontsize=7.5, ncol=2)
+    fig.tight_layout()
+    p = out / f"fig_leadtime_{horizon}h.png"
+    fig.savefig(p)
+    plt.close(fig)
+    return p
+
+
+def example_forecast(
+    wide: pd.DataFrame,
+    device: str,
+    origin: pd.Timestamp,
+    series: dict[str, np.ndarray],
+    truth: np.ndarray,
+    band: tuple[np.ndarray, np.ndarray] | None,
+    out: Path,
+    context_len: int = 504,
+    history_hours: int = 48,
+    baseline: np.ndarray | None = None,
+) -> Path:
+    """One window, zoomed to the last 48 h of context plus the held-out horizon.
+
+    Only the best Timestral (with its 10-90% band) and two competitors are drawn:
+    six nearly identical lines on one panel is decoration, not information.
+    """
+    i = wide.index.get_loc(origin)
+    hist = wide[device].to_numpy(dtype=float)[i - context_len : i]
+    ht = wide.index[i - context_len : i]
+    ft = pd.date_range(origin, periods=len(truth), freq="1h")
+
+    fig, ax = plt.subplots(figsize=(8.6, 3.8))
+    ax.plot(ht[-history_hours:], hist[-history_hours:], color="#111827", lw=1.6, label="observed")
+    ax.plot(ft, truth, color="#111827", lw=1.5, ls=":", marker=".", ms=3, label="truth (held out)")
+    if band is not None:
+        lo, hi = band
+        ax.fill_between(ft, lo, hi, color="#c2410c", alpha=0.16, label="timestral 10-90%")
+    for name, fc in series.items():
+        ax.plot(ft, fc, color=_color(name), lw=1.7, marker="o", ms=2.6, label=name)
+    if baseline is not None:
+        ax.plot(ft, baseline, color="#6b7280", lw=1.2, ls="--", label="seasonal naive")
+    ax.set_title(f"{device} @ {origin:%Y-%m-%d %H:%M} local  —  {len(truth)} h ahead")
+    ax.set_ylabel("deg C")
+    ax.legend(frameon=False, fontsize=7.5, ncol=3, loc="upper left")
+    ax.xaxis.set_major_formatter(matplotlib.dates.DateFormatter("%a %H:%M"))
+    ax.tick_params(axis="x", labelsize=7)
+    fig.tight_layout()
+    p = out / f"fig_example_{device}.png"
+    fig.savefig(p)
+    plt.close(fig)
+    return p
+
+
+def device_heatmap(per_window: pd.DataFrame, out: Path, horizon: int, metric: str = "mase") -> Path:
+    d = per_window[(per_window["horizon"] == horizon) & per_window[metric].notna()]
+    if d.empty:
+        return out / "fig_device_heatmap.png"
+    piv = d.pivot_table(index="device", columns="model", values=metric, aggfunc="mean")
+    piv = piv.dropna(axis=1, how="all")
+    fig, ax = plt.subplots(figsize=(0.62 * len(piv.columns) + 3.2, 0.4 * len(piv) + 1.8))
+    im = ax.imshow(piv.to_numpy(), cmap="RdYlGn_r", aspect="auto")
+    ax.set_xticks(range(len(piv.columns)), piv.columns, rotation=40, ha="right", fontsize=7)
+    ax.set_yticks(range(len(piv.index)), piv.index, fontsize=7)
+    for i in range(piv.shape[0]):
+        for j in range(piv.shape[1]):
+            v = piv.iat[i, j]
+            if np.isfinite(v):
+                ax.text(j, i, f"{v:.2f}", ha="center", va="center", fontsize=6.2)
+    ax.set_title(f"{metric.upper()} by sensor @ {horizon}h")
+    fig.colorbar(im, ax=ax, shrink=0.8)
+    fig.tight_layout()
+    p = out / f"fig_device_heatmap_{horizon}h.png"
+    fig.savefig(p)
+    plt.close(fig)
+    return p

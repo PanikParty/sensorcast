@@ -1,0 +1,41 @@
+{
+  "raw_samples": 13858,
+  "span_days": 53.916666666666664,
+  "t_start": "2026-08-26 20:00:00-07:00",
+  "t_end": "2026-10-19 18:00:00-07:00",
+  "freq": "1h",
+  "n_hours": 1295,
+  "n_devices": 9,
+  "nan_frac": 0.3184899184899185,
+  "context_len": 504,
+  "horizons": [
+    24,
+    6
+  ],
+  "eval_days": 14,
+  "step_hours": 12,
+  "models": [
+    "timestral:5M",
+    "timestral:28M",
+    "timestral:123M",
+    "timestral:209M",
+    "timesfm",
+    "chronos:small",
+    "baseline:persistence",
+    "baseline:seasonal_naive",
+    "baseline:climatology_hod",
+    "baseline:drift"
+  ],
+  "devices": [
+    "bedroom",
+    "garage",
+    "kitchen",
+    "kyan",
+    "livingroom",
+    "office",
+    "saskia_s_room",
+    "shed",
+    "shed_north"
+  ],
+  "torch_threads": 4
+}
