@@ -60,17 +60,41 @@ def accuracy_bars(agg: pd.DataFrame, out: Path, metric: str = "mase") -> Path:
     return p
 
 
+# Lead-time curves overlap, so family colour is not enough: every foundation model gets its
+# own hue (a colourblind-validated categorical order, fixed per model so a figure with fewer
+# models never repaints the rest) plus its own marker; baselines recede as grey, told apart
+# by dash pattern.
+LEADTIME_STYLE = {
+    "timesfm-3.0": dict(color="#2a78d6", marker="o"),
+    "timestral-209M": dict(color="#eb6834", marker="s"),
+    "chronos-bolt-small": dict(color="#1baf7a", marker="^"),
+    "timestral-123M": dict(color="#eda100", marker="D"),
+    "timestral-28M": dict(color="#e87ba4", marker="v"),
+    "timestral-5M": dict(color="#008300", marker="P"),
+    "persistence": dict(color="#898781", ls=(0, (6, 2))),
+    "seasonal_naive": dict(color="#52514e", ls=(0, (1, 1.5))),
+    "climatology_hod": dict(color="#898781", ls=(0, (6, 2, 1, 2))),
+    "drift": dict(color="#52514e", ls=(0, (3, 1.5))),
+}
+
+
 def leadtime_curves(err: dict[str, np.ndarray], out: Path, horizon: int) -> Path:
-    fig, ax = plt.subplots(figsize=(6.4, 3.8))
-    for model, arr in err.items():
-        if arr.shape[1] != horizon:
+    fig, ax = plt.subplots(figsize=(7.6, 3.8))
+    order = list(LEADTIME_STYLE) + [m for m in err if m not in LEADTIME_STYLE]
+    for model in order:
+        arr = err.get(model)
+        if arr is None or arr.shape[1] != horizon:
             continue
         rmse = np.sqrt(np.nanmean(arr**2, axis=0))
-        ax.plot(np.arange(1, horizon + 1), rmse, label=model, color=_color(model), lw=1.7)
+        style = LEADTIME_STYLE.get(model, dict(color=_color(model)))
+        fm = "marker" in style
+        ax.plot(np.arange(1, horizon + 1), rmse, label=model, lw=1.7 if fm else 1.3,
+                markersize=4.5, markevery=max(1, horizon // 8), zorder=3 if fm else 2, **style)
     ax.set_xlabel("lead time (hours ahead)")
     ax.set_ylabel("RMSE (deg C)")
     ax.set_title(f"Error growth over the horizon ({horizon} h)")
-    ax.legend(frameon=False, fontsize=7.5, ncol=2)
+    # outside the axes: the curves span the full height, so any inside spot covers one
+    ax.legend(frameon=False, fontsize=7.5, loc="upper left", bbox_to_anchor=(1.01, 1.0))
     fig.tight_layout()
     p = out / f"fig_leadtime_{horizon}h.png"
     fig.savefig(p)
